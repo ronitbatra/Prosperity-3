@@ -17,14 +17,14 @@ class Trader:
                 "fair_value": 1000,
                 "take_width": 1,
                 "clear_width": 1,
-                "make_edge": 2,
+                "make_edge": 1,
                 "position_limit": 50
             },
             Product.KELP: {
                 "fair_value": 2025,
                 "take_width": 1,
                 "clear_width": 1,
-                "make_edge": 2,
+                "make_edge": 1,
                 "position_limit": 50
             }
         }
@@ -51,10 +51,10 @@ class Trader:
             total_volume = 0
             total_value = 0
 
-            for price, volume in order_depth.buy_orders():
+            for price, volume in order_depth.buy_orders.items():
                 total_value += price*volume
                 total_volume += volume
-            for price, volume in order_depth.sell_orders():
+            for price, volume in order_depth.sell_orders.items():
                 total_value += abs(price*volume)
                 total_volume += abs(volume)
             
@@ -282,7 +282,7 @@ class Trader:
             order_depth = state.order_depths[product]
             self.update_history(product, state)
 
-            fair_value = self.calculate_fair_value(product, order_depth)
+            fair_value = self.calculate_fair_value(product, order_depth, method = "vwap")
             param = self.params[product]
             take_width = param["take_width"]
             make_edge = param["make_edge"]
