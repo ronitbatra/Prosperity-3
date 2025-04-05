@@ -1,6 +1,6 @@
 from datamodel import OrderDepth, TradingState, Order
 from typing import Dict
-from prosperity_tutorial_v1 import Trader, Product  # Assuming your code is in trader.py
+from prosperity_tutorial_v1_visualizer import Trader, Product  # Assuming your code is in trader.py
 
 def create_mock_order_depth(bids, asks):
     """Helper to create mock OrderDepth object from dicts"""
