@@ -31,6 +31,7 @@ class Trader:
 
         self.params = params if params else self.default_params
 
+        #Position limits
         self.LIMIT = {
             Product.RAINFOREST_RESIN: 50,
             Product.KELP: 50
@@ -63,6 +64,7 @@ class Trader:
         else:
             return self.params[product].get("fair_value", 1000)
     
+    #Update history of prices (using mid prices)
     def update_history(self, product: str, state: TradingState):
         if product not in self.history:
             self.history[product] = {
@@ -79,6 +81,7 @@ class Trader:
 
         self.history[product]["timestamps"].append(state.timestamp)
 
+    #Generic market taking order generation
     def market_take(
         self, 
         product: str,
@@ -93,12 +96,8 @@ class Trader:
 
         position_limit = self.LIMIT[product]
 
-        buy_opportunities = []
-        sell_opportunities = []
-
         for ask_price in sorted(order_depth.sell_orders.keys()):
             if ask_price <= fair_value - take_width:
-                edge = fair_value - ask_price
                 volume = -1 * order_depth.sell_orders[ask_price]
 
                 if position + buy_order_volume + volume <= position_limit:
@@ -109,7 +108,6 @@ class Trader:
         
         for bid_price in sorted(order_depth.buy_orders.keys(), reverse = True):
             if bid_price >= fair_value + take_width:
-                edge = bid_price - fair_value
                 volume = order_depth.buy_orders[bid_price]
                 if position - sell_order_volume - volume >= -position_limit:
                     sell_order_volume += volume
@@ -117,6 +115,7 @@ class Trader:
 
         return buy_order_volume, sell_order_volume
 
+    #market taking control function
     def market_take_orders(
         self,
         product: str,
@@ -143,6 +142,7 @@ class Trader:
         
         return orders, buy_order_volume, sell_order_volume
     
+    #Generic market making function
     def market_make(
         self,
         product: str,
@@ -166,6 +166,7 @@ class Trader:
         
         return buy_order_volume, sell_order_volume
 
+    #Market make cutting barely inside previous best offer
     def aggressive_market_make(
         self,
         product: str,
@@ -202,6 +203,7 @@ class Trader:
 
         return orders, buy_order_volume, sell_order_volume
 
+    #Market make at a fixed spread
     def passive_market_make(
         self,
         product: str,
@@ -229,6 +231,7 @@ class Trader:
 
         return orders, buy_order_volume, sell_order_volume
 
+    #Market making control function
     def market_make_orders(
         self,
         product: str,
@@ -262,8 +265,7 @@ class Trader:
                 buy_order_volume,
                 sell_order_volume
             )
-        
-
+    
     def run(self, state: TradingState):
         result = {}
         traderObject = {}
@@ -309,7 +311,7 @@ class Trader:
                 position,
                 buy_order_volume,
                 sell_order_volume,
-                aggressive = True,
+                aggressive = False,
                 price_improvement = 1
             )
 
