@@ -17,14 +17,14 @@ class Trader:
                 "fair_value": 1000,
                 "take_width": 1,
                 "clear_width": 1,
-                "make_edge": 1,
+                "make_edge": 0,
                 "position_limit": 50
             },
             Product.KELP: {
                 "fair_value": 2025,
                 "take_width": 1,
                 "clear_width": 1,
-                "make_edge": 1,
+                "make_edge": 0,
                 "position_limit": 50
             }
         }
@@ -311,7 +311,7 @@ class Trader:
                 position,
                 buy_order_volume,
                 sell_order_volume,
-                aggressive = False,
+                aggressive = True,
                 price_improvement = 1
             )
 
