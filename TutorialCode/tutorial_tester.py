@@ -1,6 +1,6 @@
 from datamodel import OrderDepth, TradingState, Order
 from typing import Dict
-from prosperity_tutorial_v1_visualizer import Trader, Product  # Assuming your code is in trader.py
+from prosperity_tutorial_v2_ema import Trader, Product  # Assuming your code is in trader.py
 
 def create_mock_order_depth(bids, asks):
     """Helper to create mock OrderDepth object from dicts"""
@@ -21,8 +21,8 @@ def main():
     # Two mock products
     order_depths = {
         Product.RAINFOREST_RESIN: create_mock_order_depth(
-            {995: 10, 996: 5, 997: 10},
-            {1005: -5, 1004: -5, 1003: -10}
+            {998: 10},
+            {1001:-7}
         ),
         Product.KELP: create_mock_order_depth(
             {2024: 3, 2023: 2},
@@ -55,6 +55,7 @@ def main():
 
     # Call run and print the output
     result, conversions, traderData = trader.run(state)
+
     for product, orders in result.items():
         print(f"{product} Orders:")
         for o in orders:

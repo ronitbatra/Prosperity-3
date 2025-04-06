@@ -22,7 +22,7 @@ class Trader:
                 "position_limit": 50
             },
             Product.KELP: {
-                "fair_value": 2025,
+                "fair_value": 2020,
                 "take_width": 1,
                 "clear_width": 1,
                 "make_edge": 0,
@@ -356,10 +356,13 @@ class Trader:
 
             #Methods: "vwap", "mid_price", "vwap_ema", "mid_price_ema", "multi_day_vwap_mid", "multi_day_vwap_vwap"
             fair_value = self.calculate_fair_value(product, order_depth, 
-                                                   method = "multi_day_vwap_vwap", lookback = 15)
+                                                   method = "vwap_ema", lookback = 10)
+            
             param = self.params[product]
             take_width = param["take_width"]
             make_edge = param["make_edge"]
+            #.5 edge gave 5.24k
+            make_edge = .5
 
             all_orders = []
             buy_order_volume = 0
