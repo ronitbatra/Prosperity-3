@@ -18,14 +18,14 @@ class Trader:
                 "fair_value": 1000,
                 "take_width": 1,
                 "clear_width": 1,
-                "make_edge": 0,
+                "make_width": 1,
                 "position_limit": 50
             },
             Product.KELP: {
                 "fair_value": 2020,
                 "take_width": 1,
                 "clear_width": 1,
-                "make_edge": 0,
+                "make_width": 1,
                 "position_limit": 50
             }
         }
@@ -360,9 +360,7 @@ class Trader:
             
             param = self.params[product]
             take_width = param["take_width"]
-            make_edge = param["make_edge"]
-            #.5 edge gave 5.24k
-            make_edge = .5
+            make_edge = param["make_width"]/2
 
             all_orders = []
             buy_order_volume = 0
