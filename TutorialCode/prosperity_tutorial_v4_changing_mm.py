@@ -167,18 +167,24 @@ class Trader:
             if ask_price <= fair_value - take_width:
                 volume = -1 * order_depth.sell_orders[ask_price]
 
-                if position + buy_order_volume + volume <= position_limit:
+                if position + buy_order_volume < position_limit:
+                    volume = min(position_limit - (position+buy_order_volume), volume)
                     buy_order_volume += volume
                     orders.append(Order(product, ask_price, volume))
+                    order_depth.sell_orders[ask_price] += volume
             else:
                 break
         
         for bid_price in sorted(order_depth.buy_orders.keys(), reverse = True):
             if bid_price >= fair_value + take_width:
                 volume = order_depth.buy_orders[bid_price]
-                if position - sell_order_volume - volume >= -position_limit:
+                if position - sell_order_volume > -position_limit:
+                    volume = min(position_limit + position - sell_order_volume, volume)
                     sell_order_volume += volume
                     orders.append(Order(product, bid_price, -volume))
+                    order_depth.buy_orders[bid_price] -= volume
+
+
 
         return buy_order_volume, sell_order_volume
 
@@ -210,95 +216,73 @@ class Trader:
         return orders, buy_order_volume, sell_order_volume
     
     #Generic market making function
-    def market_make(
-        self,
-        product: str,
-        orders: List[Order],
-        bid: float,
-        ask: float,
-        position: int,
-        buy_order_volume: int,
-        sell_order_volume: int
-    ) -> (int, int):
-
-        buy_quantity = self.LIMIT[product] - (position + buy_order_volume)
-        if buy_quantity > 0:
-            orders.append(Order(product, bid, buy_quantity))
-            buy_order_volume += buy_quantity
-
-        sell_quantity = self.LIMIT[product] + (position - sell_order_volume)
-        if sell_quantity > 0:
-            orders.append(Order(product, ask, -sell_quantity))
-            sell_order_volume += sell_quantity
-        
-        return buy_order_volume, sell_order_volume
-
-    #Market make cutting barely inside previous best offer
-    def aggressive_market_make(
+    def improved_market_make(
         self,
         product: str,
         order_depth: OrderDepth,
         fair_value: float,
-        min_edge: float,
+        min_edge: float,     # Base spread from fair value
         position: int,
         buy_order_volume: int,
         sell_order_volume: int,
-        price_improvement: int
-    ) -> (int, int):
-
+        mode: str = "aggressive", # "aggressive" or "passive"
+        price_improvement: int = 1,  # Amount to improve on best price when aggressive
+        manage_position: bool = False,
+        soft_position_limit: int = 10
+    ) -> (List[Order], int, int):
+        
         orders: List[Order] = []
-
-        best_bid = max(order_depth.buy_orders.keys()) if order_depth.buy_orders else None
-        best_ask = min(order_depth.sell_orders.keys()) if order_depth.sell_orders else None
-
-        theoretical_bid = round(fair_value - min_edge)
-        theoretical_ask = round(fair_value + min_edge)
-
-        # Undercut best bid/ask if there's room
-        bid_price = min(theoretical_bid, round(best_bid + price_improvement)) if best_bid and best_bid < theoretical_bid else theoretical_bid
-        ask_price = max(theoretical_ask, round(best_ask - price_improvement)) if best_ask and best_ask > theoretical_ask else theoretical_ask
-
-        buy_order_volume, sell_order_volume = self.market_make(
-            product,
-            orders,
-            bid_price,
-            ask_price,
-            position,
-            buy_order_volume,
-            sell_order_volume
-        )
-
+        
+        if mode == "passive":
+            # Passive mode - just use fixed spread
+            bid_price = round(fair_value - min_edge)
+            ask_price = round(fair_value + min_edge)
+            
+        else:  # Aggressive mode
+            # Find current best prices
+            best_bid = max(order_depth.buy_orders.keys()) if order_depth.buy_orders else None
+            best_ask = min(order_depth.sell_orders.keys()) if order_depth.sell_orders else None
+            
+            # Calculate theoretical prices based on fair value
+            theoretical_bid = round(fair_value - min_edge)
+            theoretical_ask = round(fair_value + min_edge)
+            
+            # Aggressive pricing - improve on existing prices if within reasonable bounds
+            if best_ask and best_ask > theoretical_ask:
+                ask_price = round(min(best_ask - price_improvement, theoretical_ask + min_edge*2))
+            else:
+                ask_price = theoretical_ask
+                
+            if best_bid and best_bid < theoretical_bid:
+                bid_price = round(max(best_bid + price_improvement, theoretical_bid - min_edge*2))
+            else:
+                bid_price = theoretical_bid
+        
+        # Position management - adjust quotes based on current position
+        if manage_position:
+            if position > soft_position_limit:
+                # More aggressive to sell when long
+                ask_price = max(ask_price - 1, bid_price + 1)
+            elif position < -soft_position_limit:
+                # More aggressive to buy when short
+                bid_price = min(bid_price + 1, ask_price - 1)
+        
+        # Place orders
+        position_limit = self.LIMIT[product]
+        
+        buy_quantity = position_limit - (position + buy_order_volume)
+        if buy_quantity > 0:
+            orders.append(Order(product, bid_price, buy_quantity))
+            buy_order_volume += buy_quantity
+        
+        sell_quantity = position_limit + (position - sell_order_volume)
+        if sell_quantity > 0:
+            orders.append(Order(product, ask_price, -sell_quantity))
+            sell_order_volume += sell_quantity
+        
         return orders, buy_order_volume, sell_order_volume
-
-    #Market make at a fixed spread
-    def passive_market_make(
-        self,
-        product: str,
-        fair_value: str,
-        min_edge: int,
-        position: int,
-        buy_order_volume: int,
-        sell_order_volume: int
-    ) -> (int, int):
-
-        orders: List[Order] = []
-
-        bid_price = round(fair_value - min_edge)
-        ask_price = round(fair_value + min_edge)
-
-        buy_order_volume, sell_order_volume = self.market_make(
-            product,
-            orders,
-            bid_price,
-            ask_price,
-            position,
-            buy_order_volume,
-            sell_order_volume
-        )
-
-        return orders, buy_order_volume, sell_order_volume
-
-    #Market making control function
+    
+    
     def market_make_orders(
         self,
         product: str,
@@ -308,31 +292,29 @@ class Trader:
         position: int,
         buy_order_volume: int,
         sell_order_volume: int,
-        aggressive: bool = True,
-        price_improvement: int = 1
+        mode: str = "aggressive",  # "aggressive" or "passive"
+        price_improvement: int = 1,
+        manage_position: bool = False,
+        soft_position_limit: int = 10
     ) -> (List[Order], int, int):
-        
-        if aggressive:
-            return self.aggressive_market_make(
-                product,
-                order_depth,
-                fair_value,
-                min_edge,
-                position,
-                buy_order_volume,
-                sell_order_volume,
-                price_improvement
-            )
-        else:
-            return self.passive_market_make(
-                product,
-                fair_value,
-                min_edge,
-                position,
-                buy_order_volume,
-                sell_order_volume
-            )
-    
+        """
+        Control function for market making.
+        """
+        return self.improved_market_make(
+            product,
+            order_depth,
+            fair_value,
+            min_edge,
+            position,
+            buy_order_volume,
+            sell_order_volume,
+            mode,
+            price_improvement,
+            manage_position,
+            soft_position_limit
+        )
+
+
     def run(self, state: TradingState):
         result = {}
 
@@ -387,8 +369,8 @@ class Trader:
                 position,
                 buy_order_volume,
                 sell_order_volume,
-                aggressive = True,
-                price_improvement = 1
+                price_improvement = 1,
+                soft_position_limit= 10
             )
 
             all_orders.extend(make_orders)

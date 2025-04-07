@@ -17,14 +17,14 @@ class Trader:
             Product.RAINFOREST_RESIN: {
                 "fair_value": 1000,
                 "take_width": 1,
-                "clear_width": 1,
+                "clear_width": .5,
                 "make_width": 1,
                 "position_limit": 50
             },
             Product.KELP: {
                 "fair_value": 2020,
                 "take_width": 1,
-                "clear_width": 1,
+                "clear_width": .5,
                 "make_width": 1,
                 "position_limit": 50
             }
@@ -167,18 +167,31 @@ class Trader:
             if ask_price <= fair_value - take_width:
                 volume = -1 * order_depth.sell_orders[ask_price]
 
-                if position + buy_order_volume + volume <= position_limit:
+                if position + buy_order_volume < position_limit:
+
+                    #Maybe add buy_order_volume (in bracket with position +)
+                    volume = min(position_limit - (position), volume)
                     buy_order_volume += volume
                     orders.append(Order(product, ask_price, volume))
+                    order_depth.sell_orders[ask_price] += volume
+                    if order_depth.sell_orders[ask_price] == 0:
+                        del order_depth.sell_orders[ask_price]
             else:
                 break
         
         for bid_price in sorted(order_depth.buy_orders.keys(), reverse = True):
             if bid_price >= fair_value + take_width:
                 volume = order_depth.buy_orders[bid_price]
-                if position - sell_order_volume - volume >= -position_limit:
+                if position - sell_order_volume > -position_limit:
+                    #Maybe/probably add sell_order_volume below (negative)
+                    volume = min(position_limit + position , volume)
                     sell_order_volume += volume
                     orders.append(Order(product, bid_price, -volume))
+                    order_depth.buy_orders[bid_price] -= volume
+                    if order_depth.buy_orders[bid_price] == 0:
+                        del order_depth.buy_orders[bid_price]
+            else:
+                break
 
         return buy_order_volume, sell_order_volume
 
@@ -209,6 +222,77 @@ class Trader:
         
         return orders, buy_order_volume, sell_order_volume
     
+
+    def clear_position(
+        self,    
+        product: str,
+        order_depth: OrderDepth,
+        fair_value: float,
+        position: int,
+        orders: List[Order],
+        width: int,
+        buy_order_volume: int,
+        sell_order_volume: int,
+    ):
+        
+        position_after_take = position + buy_order_volume - sell_order_volume
+        fair_bid = round(fair_value - width)
+        fair_ask = round(fair_value + width)
+
+        buy_quantity = self.LIMIT[product] - (position + buy_order_volume)
+        sell_quantity = self.LIMIT[product] + (position - sell_order_volume)
+
+        if position_after_take > 0:
+            clear_quantity = sum(
+                volume
+                for price, volume in order_depth.buy_orders.items()
+                if price >= fair_ask
+            )
+            clear_quantity = min(clear_quantity, position_after_take)
+            sent_quantity = min(sell_quantity, clear_quantity)
+            if sent_quantity > 0:
+                orders.append(Order(product, fair_ask, -abs(sent_quantity)))
+                sell_order_volume += abs(sent_quantity)
+
+        if position_after_take < 0:
+            # Aggregate volume from all sell orders with price lower than fair_for_bid
+            clear_quantity = sum(
+                abs(volume)
+                for price, volume in order_depth.sell_orders.items()
+                if price <= fair_bid
+            )
+            clear_quantity = min(clear_quantity, abs(position_after_take))
+            sent_quantity = min(buy_quantity, clear_quantity)
+            if sent_quantity > 0:
+                orders.append(Order(product, fair_bid, abs(sent_quantity)))
+                buy_order_volume += abs(sent_quantity)
+
+        return buy_order_volume, sell_order_volume
+
+    def clear_orders(
+        self,
+        product: str,
+        order_depth: OrderDepth,
+        fair_value: float,
+        clear_width: int,
+        position: int,
+        buy_order_volume: int,
+        sell_order_volume: int,
+    ) -> (List[Order], int, int):
+        
+        orders: List[Order] = []
+        buy_order_volume, sell_order_volume = self.clear_position(
+            product,
+            order_depth,
+            fair_value,
+            position,
+            orders,
+            clear_width,
+            buy_order_volume,
+            sell_order_volume,
+        )
+        return orders, buy_order_volume, sell_order_volume
+
     #Generic market making function
     def market_make(
         self,
@@ -378,6 +462,19 @@ class Trader:
             )
 
             all_orders.extend(take_orders)
+            
+            clear_orders, buy_order_volume, sell_order_volume = self.clear_orders(
+                product,
+                order_depth,
+                fair_value_take,
+                param["clear_width"],
+                position,
+                buy_order_volume,
+                sell_order_volume
+            )
+
+            all_orders.extend(clear_orders)
+            
 
             make_orders, buy_order_volume, sell_order_volume = self.market_make_orders(
                 product,
